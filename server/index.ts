@@ -10,9 +10,12 @@ import { MAX_TESTERS, type ServerEvent, type TesterConfig, type TesterView } fro
 import { TesterRunner } from "./runner.js";
 import { loadState, saveState } from "./store.js";
 import { browserPool } from "./browser.js";
+import { detectAuth } from "./auth.js";
 
-if (!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_AUTH_TOKEN) {
-  console.warn("⚠️  ANTHROPIC_API_KEY no está definida (ver .env.example)");
+{
+  const auth = detectAuth();
+  if (auth.ok) console.log(`Autenticación con Anthropic: ${auth.source}`);
+  else console.warn(`⚠️  ${auth.source}. ${auth.hint ?? ""}`);
 }
 
 const here = path.dirname(fileURLToPath(import.meta.url));

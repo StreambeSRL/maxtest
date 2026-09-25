@@ -3,6 +3,7 @@ import { EventEmitter } from "node:events";
 import type { BrowserContext, Page } from "playwright";
 import type { CaseResult, LogEntry, ServerEvent, TesterConfig, TesterRunState, TesterStatus } from "../shared/types.js";
 import { browserPool } from "./browser.js";
+import { detectAuth } from "./auth.js";
 import { SENIOR_TESTER_SYSTEM, buildTaskMessage } from "./prompt.js";
 import { TOOL_DEFS, executeTool, isToolName, pageInfo, takeScreenshot } from "./tools.js";
 
@@ -77,8 +78,9 @@ export class TesterRunner extends EventEmitter {
     this.abort = new AbortController();
     this.setStatus("starting");
     this.emitEvent({ type: "tester_upsert", tester: { config: this.config, run: this.run } });
-    if (!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_AUTH_TOKEN) {
-      const msg = "Falta ANTHROPIC_API_KEY: cargala en el archivo .env (ver .env.example) y reiniciá el servidor.";
+    const auth = detectAuth();
+    if (!auth.ok) {
+      const msg = `No hay credenciales de Anthropic (${auth.source}). ${auth.hint ?? ""}`.trim();
       this.log("error", msg);
       this.setStatus("error", { error: msg });
       return;
@@ -215,7 +217,7 @@ export class TesterRunner extends EventEmitter {
     });
 
     this.setStatus("running");
-    this.log("info", `Tester iniciado con modelo ${MODEL} (esfuerzo ${EFFORT})`);
+    this.log("info", `Tester iniciado con modelo ${MODEL} (esfuerzo ${EFFORT}) · auth: ${detectAuth().source}`);
 
     const messages: Anthropic.Beta.BetaMessageParam[] = [
       { role: "user", content: buildTaskMessage(this.config) },
