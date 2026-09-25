@@ -4,9 +4,27 @@ import { api, useServerState, useToast } from "./store";
 import { Sidebar } from "./components/Sidebar";
 import { MainView } from "./components/MainView";
 import { TesterForm } from "./components/TesterForm";
+import { GlobalReport } from "./components/GlobalReport";
+import { Login } from "./components/Login";
 
 export function App() {
+  const [session, setSession] = useState<{ accessEnabled: boolean; authorized: boolean } | null>(null);
+  useEffect(() => {
+    fetch("/api/session")
+      .then((r) => r.json())
+      .then(setSession)
+      .catch(() => setSession({ accessEnabled: false, authorized: true }));
+  }, []);
+  if (session === null) return <div className="login"><p className="muted">Cargando…</p></div>;
+  if (session.accessEnabled && !session.authorized) {
+    return <Login onDone={() => setSession({ ...session, authorized: true })} />;
+  }
+  return <Workspace />;
+}
+
+function Workspace() {
   const state = useServerState();
+  const [report, setReport] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [form, setForm] = useState<{ open: boolean; editing?: TesterConfig }>({ open: false });
   const [toast, setToast] = useToast();
@@ -72,7 +90,9 @@ export function App() {
         onDelete={onDelete}
         onDuplicate={onDuplicate}
         onEdit={(t) => setForm({ open: true, editing: t.config })}
+        onReport={() => setReport(true)}
       />
+      {report && <GlobalReport testers={state.testers} onClose={() => setReport(false)} />}
       {form.open && <TesterForm initial={form.editing} onClose={() => setForm({ open: false })} onSave={onSave} />}
       {toast && <div className="toast">{toast}</div>}
     </div>

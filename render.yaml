@@ -1,0 +1,28 @@
+# Blueprint de Render (https://render.com): crea el servicio con un clic desde el repo.
+services:
+  - type: web
+    name: ai-testers
+    runtime: docker
+    plan: standard # Chromium necesita >= 2 GB de RAM para varios testers en paralelo
+    healthCheckPath: /api/session
+    disk:
+      name: ai-testers-data
+      mountPath: /app/data
+      sizeGB: 1
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ACCESS_PASSWORD
+        sync: false
+      - key: AZURE_DEVOPS_ORG
+        sync: false
+      - key: AZURE_DEVOPS_PROJECT
+        sync: false
+      - key: AZURE_DEVOPS_PAT
+        sync: false
+      - key: TESTER_MODEL
+        value: claude-opus-5
+      - key: TESTER_EFFORT
+        value: medium
+      - key: NODE_ENV
+        value: production

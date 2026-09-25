@@ -107,6 +107,9 @@ export async function api<T = any>(path: string, method = "GET", body?: unknown)
     headers: body ? { "Content-Type": "application/json" } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   });
+  if (res.status === 401) {
+    location.reload();
+  }
   if (!res.ok) {
     let msg = res.statusText;
     try {

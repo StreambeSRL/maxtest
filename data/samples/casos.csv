@@ -1,0 +1,3 @@
+ID,Titulo,Pasos,Esperado
+12345,Logout,"Abrir menú, tocar Logout","Vuelve al login"
+12346,Carrito vacío,"Abrir carrito sin productos","No hay ítems"

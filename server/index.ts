@@ -11,6 +11,10 @@ import { TesterRunner } from "./runner.js";
 import { loadState, saveState } from "./store.js";
 import { browserPool } from "./browser.js";
 import { detectAuth } from "./auth.js";
+import { buildReport, toCsv, toHtml, toJUnit, toMarkdown } from "./report.js";
+import { azdoConfigFromEnv, listPlans, listSuites, publishReport } from "./azdo.js";
+import { extractText, SUPPORTED_EXTENSIONS } from "./extract.js";
+import { accessEnabled, checkPassword, clearSessionCookie, isAuthorized, requireAccess, setSessionCookie } from "./access.js";
 
 {
   const auth = detectAuth();
@@ -22,7 +26,24 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 4321);
 
 const app = express();
-app.use(express.json({ limit: "2mb" }));
+app.use(express.json({ limit: "25mb" }));
+
+// ---------------- Acceso (contraseña compartida opcional) ----------------
+
+app.get("/api/session", (req, res) => {
+  res.json({ accessEnabled, authorized: isAuthorized(req.headers.cookie) });
+});
+app.post("/api/login", (req, res) => {
+  if (!accessEnabled) return res.json({ ok: true });
+  if (!checkPassword(String(req.body?.password ?? ""))) return res.status(401).json({ error: "Contraseña incorrecta" });
+  setSessionCookie(res);
+  res.json({ ok: true });
+});
+app.post("/api/logout", (_req, res) => {
+  clearSessionCookie(res);
+  res.json({ ok: true });
+});
+app.use("/api", requireAccess);
 
 // ---------------- Estado en memoria ----------------
 
@@ -179,6 +200,89 @@ function reportMarkdown(r: TesterRunner): string {
   return lines.join("\n");
 }
 
+// ---------------- Extracción de texto de archivos ----------------
+
+app.get("/api/extract/formats", (_req, res) => res.json({ extensions: SUPPORTED_EXTENSIONS }));
+
+app.post("/api/extract", async (req, res) => {
+  const files: { name: string; data: string }[] = Array.isArray(req.body?.files) ? req.body.files : [];
+  if (files.length === 0) return res.status(400).json({ error: "No se recibieron archivos" });
+  const out: { name: string; text?: string; error?: string }[] = [];
+  for (const f of files.slice(0, 10)) {
+    try {
+      const buf = Buffer.from(String(f.data).replace(/^data:[^;]*;base64,/, ""), "base64");
+      out.push({ name: f.name, text: await extractText(String(f.name), buf) });
+    } catch (e: any) {
+      out.push({ name: f.name, error: e.message });
+    }
+  }
+  res.json({ files: out });
+});
+
+// ---------------- Reporte consolidado ----------------
+
+const REPORT_FORMATS: Record<string, { type: string; ext: string; render: (r: ReturnType<typeof buildReport>) => string; evidence: boolean }> = {
+  json: { type: "application/json; charset=utf-8", ext: "json", render: (r) => JSON.stringify(r, null, 2), evidence: false },
+  md: { type: "text/markdown; charset=utf-8", ext: "md", render: toMarkdown, evidence: false },
+  csv: { type: "text/csv; charset=utf-8", ext: "csv", render: toCsv, evidence: false },
+  xml: { type: "application/xml; charset=utf-8", ext: "xml", render: toJUnit, evidence: false },
+  html: { type: "text/html; charset=utf-8", ext: "html", render: toHtml, evidence: true },
+};
+
+app.get("/api/report", (_req, res) => {
+  res.json(buildReport(allViews()));
+});
+app.get("/api/report.:fmt", (req, res) => {
+  const f = REPORT_FORMATS[req.params.fmt];
+  if (!f) return res.status(404).json({ error: "Formato no soportado" });
+  const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-");
+  const name = req.params.fmt === "xml" ? `ai-testers-junit-${stamp}.xml` : `ai-testers-reporte-${stamp}.${f.ext}`;
+  res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
+  res.type(f.type).send(f.render(buildReport(allViews(), { withEvidence: f.evidence })));
+});
+
+// ---------------- Azure DevOps ----------------
+
+app.get("/api/azdo/status", (_req, res) => {
+  const cfg = azdoConfigFromEnv();
+  res.json({ configured: !!cfg, org: cfg?.org, project: cfg?.project });
+});
+app.get("/api/azdo/plans", async (_req, res) => {
+  const cfg = azdoConfigFromEnv();
+  if (!cfg) return res.status(400).json({ error: "Azure DevOps no está configurado (AZURE_DEVOPS_ORG / PROJECT / PAT)" });
+  try {
+    res.json({ plans: await listPlans(cfg) });
+  } catch (e: any) {
+    res.status(502).json({ error: e.message });
+  }
+});
+app.get("/api/azdo/plans/:planId/suites", async (req, res) => {
+  const cfg = azdoConfigFromEnv();
+  if (!cfg) return res.status(400).json({ error: "Azure DevOps no está configurado" });
+  try {
+    res.json({ suites: await listSuites(cfg, Number(req.params.planId)) });
+  } catch (e: any) {
+    res.status(502).json({ error: e.message });
+  }
+});
+app.post("/api/azdo/publish", async (req, res) => {
+  const cfg = azdoConfigFromEnv();
+  if (!cfg) return res.status(400).json({ error: "Azure DevOps no está configurado (AZURE_DEVOPS_ORG / PROJECT / PAT)" });
+  const ids: string[] | undefined = Array.isArray(req.body?.testerIds) ? req.body.testerIds : undefined;
+  const views = allViews().filter((v) => !ids || ids.includes(v.config.id));
+  try {
+    const result = await publishReport(cfg, buildReport(views, { withEvidence: true }), {
+      planId: req.body?.planId ? Number(req.body.planId) : undefined,
+      suiteId: req.body?.suiteId ? Number(req.body.suiteId) : undefined,
+      runName: req.body?.runName,
+      attachEvidence: req.body?.attachEvidence !== false,
+    });
+    res.json(result);
+  } catch (e: any) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
 // ---------------- Frontend estático (build) ----------------
 
 const clientDist = path.resolve(here, "../dist/client");
@@ -190,7 +294,11 @@ if (fs.existsSync(clientDist)) {
 // ---------------- WebSocket ----------------
 
 const server = http.createServer(app);
-const wss = new WebSocketServer({ server, path: "/ws" });
+const wss = new WebSocketServer({
+  server,
+  path: "/ws",
+  verifyClient: (info: { req: http.IncomingMessage }) => isAuthorized(info.req.headers.cookie),
+});
 wss.on("connection", (ws) => {
   wsClients.add(ws);
   ws.send(JSON.stringify({ type: "snapshot", testers: allViews(), limits: { maxTesters: MAX_TESTERS } } satisfies ServerEvent));
@@ -199,7 +307,8 @@ wss.on("connection", (ws) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`AI Testers escuchando en http://localhost:${PORT}`);
+  console.log(`AI Testers escuchando en http://localhost:${PORT}${accessEnabled ? " (con contraseña de acceso)" : ""}`);
+  console.log(`Azure DevOps: ${azdoConfigFromEnv() ? "configurado" : "no configurado (opcional)"}`);
 });
 
 async function shutdown() {

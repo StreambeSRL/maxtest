@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { TesterConfig } from "../../../shared/types";
+import { TextFieldWithImport } from "./FileImport";
 
 interface Props {
   initial?: TesterConfig;
@@ -14,7 +15,9 @@ const EXAMPLE_CASES = `TC-01 Login exitoso
 
 TC-02 Login con contraseña incorrecta
   Pasos: ingresar usuario válido y contraseña incorrecta.
-  Resultado esperado: mensaje de error claro; no se accede al sistema.`;
+  Resultado esperado: mensaje de error claro; no se accede al sistema.
+
+(También podés cargar un archivo: txt, md, csv, xlsx, docx, pdf…)`;
 
 export function TesterForm({ initial, onClose, onSave }: Props) {
   const [f, setF] = useState<Partial<TesterConfig>>({
@@ -26,8 +29,7 @@ export function TesterForm({ initial, onClose, onSave }: Props) {
     acceptanceCriteria: initial?.acceptanceCriteria ?? "",
     testData: initial?.testData ?? "",
   });
-  const set = (k: keyof TesterConfig) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-    setF({ ...f, [k]: e.target.value });
+  const set = (k: keyof TesterConfig) => (v: string) => setF((prev) => ({ ...prev, [k]: v }));
   const valid = (f.baseUrl ?? "").trim().length > 3;
 
   return (
@@ -50,44 +52,54 @@ export function TesterForm({ initial, onClose, onSave }: Props) {
         <div className="form-grid">
           <label>
             <span>Nombre</span>
-            <input value={f.name} onChange={set("name")} placeholder="Ej: Tester Login" />
+            <input value={f.name} onChange={(e) => set("name")(e.target.value)} placeholder="Ej: Tester Login" />
           </label>
           <label>
             <span>URL del sistema a probar *</span>
-            <input value={f.baseUrl} onChange={set("baseUrl")} placeholder="https://mi-app.com" required />
+            <input value={f.baseUrl} onChange={(e) => set("baseUrl")(e.target.value)} placeholder="https://mi-app.com" required />
           </label>
         </div>
 
-        <label>
-          <span>Instrucciones / contexto para el tester</span>
-          <textarea
-            rows={3}
-            value={f.prompt}
-            onChange={set("prompt")}
-            placeholder="Ej: Es un sistema de gestión de turnos. Probá como usuario recepcionista. No crees más de 2 turnos."
-          />
-        </label>
+        <TextFieldWithImport
+          label="Instrucciones / contexto para el tester"
+          rows={3}
+          value={f.prompt ?? ""}
+          onChange={set("prompt")}
+          placeholder="Ej: Es un sistema de gestión de turnos. Probá como usuario recepcionista. No crees más de 2 turnos."
+        />
 
-        <label>
-          <span>Casos de prueba * (ya escritos)</span>
-          <textarea rows={9} value={f.testCases} onChange={set("testCases")} placeholder={EXAMPLE_CASES} />
-        </label>
+        <TextFieldWithImport
+          label="Casos de prueba * (ya escritos)"
+          rows={9}
+          value={f.testCases ?? ""}
+          onChange={set("testCases")}
+          placeholder={EXAMPLE_CASES}
+        />
 
         <div className="form-grid">
-          <label>
-            <span>Historias de usuario (opcional)</span>
-            <textarea rows={5} value={f.userStories} onChange={set("userStories")} placeholder="Como <rol> quiero <acción> para <beneficio>…" />
-          </label>
-          <label>
-            <span>Criterios de aceptación (opcional)</span>
-            <textarea rows={5} value={f.acceptanceCriteria} onChange={set("acceptanceCriteria")} placeholder="Dado… cuando… entonces…" />
-          </label>
+          <TextFieldWithImport
+            label="Historias de usuario (opcional)"
+            rows={5}
+            value={f.userStories ?? ""}
+            onChange={set("userStories")}
+            placeholder="Como <rol> quiero <acción> para <beneficio>…"
+          />
+          <TextFieldWithImport
+            label="Criterios de aceptación (opcional)"
+            rows={5}
+            value={f.acceptanceCriteria ?? ""}
+            onChange={set("acceptanceCriteria")}
+            placeholder="Dado… cuando… entonces…"
+          />
         </div>
 
-        <label>
-          <span>Datos de prueba / credenciales (opcional)</span>
-          <textarea rows={2} value={f.testData} onChange={set("testData")} placeholder="usuario: demo / clave: demo123 — solo entornos de prueba" />
-        </label>
+        <TextFieldWithImport
+          label="Datos de prueba / credenciales (opcional)"
+          rows={2}
+          value={f.testData ?? ""}
+          onChange={set("testData")}
+          placeholder="usuario: demo / clave: demo123 — solo entornos de prueba"
+        />
 
         <footer>
           <button type="button" className="btn ghost" onClick={onClose}>

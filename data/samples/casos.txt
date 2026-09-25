@@ -1,0 +1,3 @@
+TC-10 Ordenar productos por precio
+  Pasos: en el catálogo elegir 'Price (low to high)'.
+  Esperado: los productos quedan ordenados ascendente.

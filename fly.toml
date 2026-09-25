@@ -1,0 +1,27 @@
+# Fly.io: `fly launch --copy-config --no-deploy` y después `fly secrets set ...` y `fly deploy`
+app = "ai-testers"
+primary_region = "gru"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "4321"
+  TESTER_MODEL = "claude-opus-5"
+  TESTER_EFFORT = "medium"
+
+[http_service]
+  internal_port = 4321
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[vm]]
+  size = "shared-cpu-2x"
+  memory = "2gb"
+
+[mounts]
+  source = "ai_testers_data"
+  destination = "/app/data"

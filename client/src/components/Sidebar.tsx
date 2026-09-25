@@ -13,11 +13,13 @@ interface Props {
   onDelete: (t: TesterView) => void;
   onDuplicate: (t: TesterView) => void;
   onEdit: (t: TesterView) => void;
+  onReport: () => void;
 }
 
 export function Sidebar(p: Props) {
   const running = p.testers.filter((t) => isActive(t.run.status)).length;
   const canAdd = p.testers.length < p.maxTesters;
+  const totalCases = p.testers.reduce((n, t) => n + t.run.results.length, 0);
   return (
     <aside className="sidebar">
       <header className="sidebar-head">
@@ -66,6 +68,9 @@ export function Sidebar(p: Props) {
       <footer className="sidebar-foot">
         <button className="btn add" onClick={p.onCreate} disabled={!canAdd} title={canAdd ? "" : `Máximo ${p.maxTesters}`}>
           + Agregar tester
+        </button>
+        <button className="btn report-btn" onClick={p.onReport} disabled={p.testers.length === 0}>
+          📄 Reporte consolidado{totalCases > 0 ? ` (${totalCases} casos)` : ""}
         </button>
       </footer>
     </aside>
