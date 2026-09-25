@@ -14,6 +14,7 @@ interface Props {
   onDuplicate: (t: TesterView) => void;
   onEdit: (t: TesterView) => void;
   onReport: () => void;
+  onLogout?: () => void;
 }
 
 export function Sidebar(p: Props) {
@@ -25,13 +26,18 @@ export function Sidebar(p: Props) {
       <header className="sidebar-head">
         <div className="brand">
           <span className="brand-dot" />
-          <div>
+          <div className="brand-text">
             <h1>AI Testers</h1>
             <small>
               {p.testers.length}/{p.maxTesters} testers · {running} en ejecución
               <span className={`conn ${p.connected ? "on" : "off"}`} title={p.connected ? "Conectado" : "Sin conexión"} />
             </small>
           </div>
+          {p.onLogout && (
+            <button className="btn sm ghost logout" onClick={p.onLogout} title="Cerrar sesión">
+              ⎋ Salir
+            </button>
+          )}
         </div>
         <div className="global-actions">
           <button className="btn primary" onClick={() => p.onAll("start")} disabled={p.testers.length === 0}>

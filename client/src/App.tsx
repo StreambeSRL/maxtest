@@ -19,10 +19,10 @@ export function App() {
   if (session.accessEnabled && !session.authorized) {
     return <Login onDone={() => setSession({ ...session, authorized: true })} />;
   }
-  return <Workspace />;
+  return <Workspace accessEnabled={session.accessEnabled} />;
 }
 
-function Workspace() {
+function Workspace({ accessEnabled }: { accessEnabled: boolean }) {
   const state = useServerState();
   const [report, setReport] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -51,6 +51,13 @@ function Workspace() {
 
   const onAction = (t: TesterView, action: "start" | "stop" | "pause" | "resume") =>
     safe(() => api(`/testers/${t.config.id}/${action}`, "POST"));
+  const onLogout = async () => {
+    try {
+      await fetch("/api/logout", { method: "POST" });
+    } finally {
+      location.reload();
+    }
+  };
   const onAll = (action: "start" | "stop") => safe(() => api(`/all/${action}`, "POST"));
   const onDelete = (t: TesterView) => {
     if (!confirm(`¿Eliminar el tester "${t.config.name}"?`)) return;
@@ -91,6 +98,7 @@ function Workspace() {
         onDuplicate={onDuplicate}
         onEdit={(t) => setForm({ open: true, editing: t.config })}
         onReport={() => setReport(true)}
+        onLogout={accessEnabled ? onLogout : undefined}
       />
       {report && <GlobalReport testers={state.testers} onClose={() => setReport(false)} />}
       {form.open && <TesterForm initial={form.editing} onClose={() => setForm({ open: false })} onSave={onSave} />}
