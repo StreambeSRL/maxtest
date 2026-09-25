@@ -14,6 +14,7 @@ type Tab = "activity" | "results" | "summary" | "spec";
 export function MainView({ tester, onAction, onEdit, onCreate }: Props) {
   const [tab, setTab] = useState<Tab>("activity");
   const [evidence, setEvidence] = useState<CaseResult | null>(null);
+  const split = usePanelSplit();
 
   if (!tester) {
     return (
@@ -45,7 +46,7 @@ export function MainView({ tester, onAction, onEdit, onCreate }: Props) {
   const passed = run.results.filter((r) => r.status === "passed").length;
 
   return (
-    <main className="main">
+    <main className="main" ref={split.mainRef}>
       <header className="main-head">
         <div className="main-title">
           <h2>{config.name}</h2>
@@ -105,7 +106,42 @@ export function MainView({ tester, onAction, onEdit, onCreate }: Props) {
         </div>
       </section>
 
-      <section className="panel">
+      <div
+        className={`splitter ${split.dragging ? "dragging" : ""}`}
+        onPointerDown={split.startDrag}
+        onDoubleClick={split.toggleHidden}
+        role="separator"
+        aria-orientation="horizontal"
+        title="Arrastrá para cambiar el tamaño · doble clic para ocultar/mostrar"
+      >
+        <span className="grip" />
+        <div className="splitter-actions" onPointerDown={(e) => e.stopPropagation()}>
+          {split.mode === "hidden" ? (
+            <button className="btn sm ghost" onClick={split.restore} title="Mostrar panel">
+              ▲ Mostrar panel
+            </button>
+          ) : (
+            <>
+              <button
+                className="btn sm ghost"
+                onClick={split.mode === "max" ? split.restore : split.maximize}
+                title={split.mode === "max" ? "Restaurar" : "Maximizar panel"}
+              >
+                {split.mode === "max" ? "▭" : "▲"}
+              </button>
+              <button className="btn sm ghost" onClick={split.hide} title="Ocultar panel">
+                ▼
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      <section
+        className={`panel ${split.mode === "hidden" ? "hidden" : ""}`}
+        style={split.mode === "custom" ? { flex: `0 0 ${split.height}px` } : undefined}
+        data-mode={split.mode}
+      >
         <nav className="tabs">
           <button className={tab === "activity" ? "on" : ""} onClick={() => setTab("activity")}>
             Actividad
@@ -157,6 +193,71 @@ export function MainView({ tester, onAction, onEdit, onCreate }: Props) {
       )}
     </main>
   );
+}
+
+// ---------- Divisor redimensionable entre la pantalla y el panel ----------
+
+type SplitMode = "default" | "custom" | "max" | "hidden";
+const SPLIT_KEY = "ait.panelSplit";
+const MIN_PANEL = 110;
+const MIN_SCREEN = 140;
+
+function loadSplit(): { mode: SplitMode; height: number } {
+  try {
+    const v = JSON.parse(localStorage.getItem(SPLIT_KEY) || "null");
+    if (v && ["default", "custom", "max", "hidden"].includes(v.mode) && typeof v.height === "number") return v;
+  } catch {}
+  return { mode: "default", height: 320 };
+}
+
+function usePanelSplit() {
+  const mainRef = useRef<HTMLElement>(null);
+  const [state, setState] = useState(loadSplit);
+  const [dragging, setDragging] = useState(false);
+  // Último tamaño "normal" (por defecto o elegido arrastrando), para restaurar
+  // después de ocultar o maximizar.
+  const lastNormal = useRef<{ mode: SplitMode; height: number }>(
+    state.mode === "default" || state.mode === "custom" ? state : { mode: "default", height: state.height },
+  );
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SPLIT_KEY, JSON.stringify(state));
+    } catch {}
+    if (state.mode === "default" || state.mode === "custom") lastNormal.current = state;
+  }, [state]);
+
+  const startDrag = (e: React.PointerEvent) => {
+    const main = mainRef.current;
+    if (!main || e.button !== 0) return;
+    e.preventDefault();
+    setDragging(true);
+    const rect = main.getBoundingClientRect();
+    const header = main.querySelector(".main-head")?.getBoundingClientRect().height ?? 60;
+    const maxPanel = rect.height - header - MIN_SCREEN;
+    const onMove = (ev: PointerEvent) => {
+      // 18px = margen inferior del panel
+      const h = Math.round(rect.bottom - ev.clientY - 18);
+      if (h < MIN_PANEL / 2) setState((s) => ({ ...s, mode: "hidden" }));
+      else setState({ mode: "custom", height: Math.max(MIN_PANEL, Math.min(maxPanel, h)) });
+    };
+    const onUp = () => {
+      setDragging(false);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      document.body.classList.remove("resizing");
+    };
+    document.body.classList.add("resizing");
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+
+  const hide = () => setState((s) => ({ ...s, mode: "hidden" }));
+  const maximize = () => setState((s) => ({ ...s, mode: "max" }));
+  const restore = () => setState(lastNormal.current);
+  const toggleHidden = () => (state.mode === "hidden" ? restore() : hide());
+
+  return { mainRef, mode: state.mode, height: state.height, dragging, startDrag, hide, maximize, restore, toggleHidden };
 }
 
 function fmtTokens(n: number) {
