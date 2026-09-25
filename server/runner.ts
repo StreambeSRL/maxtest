@@ -349,7 +349,10 @@ export class TesterRunner extends EventEmitter {
             const info = this.page ? await pageInfo(this.page) : { url: "", title: "" };
             text += `\n\nURL: ${info.url}\nTítulo: ${info.title}`;
             content.push({ type: "text", text });
-            if (shot) content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: shot } });
+            // La API no admite imágenes en un tool_result con is_error; en ese caso va solo texto.
+            if (shot && !outcome.isError) {
+              content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: shot } });
+            }
           } else {
             content.push({ type: "text", text });
           }
